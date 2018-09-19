@@ -1,10 +1,16 @@
 /****************************************************************************
- * this sample is released as public domain.  It is distributed in the hope that 
- * it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
- * of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
- * Author: Danyu Li
- * Date: 09/18/18 
+  This sample is released as public domain.  It is distributed in the hope it
+  will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. 
+
+  This is the sample code for Leopard USB3.0 AR0231 AP0200 GMSL2 camera for 
+  register control under Linux using V4L2. For supporting more UVC extension
+  unit features, firmware will need to get updated.
+  
+  Author: Danyu Li
+  Date: 09/18/18 
 *****************************************************************************/
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -22,9 +28,9 @@
 #include <sys/stat.h>
 #include <sys/fcntl.h>
 
-/*********************************************************************************************************
-**                               Global data & Function declaration
-*********************************************************************************************************/
+/****************************************************************************
+**                      Global data & Function declaration
+*****************************************************************************/
 #define CLEAR(x) 							memset(&(x), 0, sizeof(x))
 #define MAX_PAIR_FOR_SPI_FLASH				(64)
 
@@ -35,24 +41,25 @@
 #define LI_XU_GENERIC_I2C_RW 				(0x10)
 
 // define the buffer for storage
-unsigned char buf1[5] 		= {0}; 				//used for LI_XU_SENSOR_REG_RW 
-unsigned char buf2[256] 	= {0}; 				//used for LI_XU_SENSOR_REGISTER_CONFIGURATION
-unsigned char buf3[256+6] 	= {0}; 				//used for LI_XU_GENERIC_I2C_RW
+unsigned char buf1[5] 		= {0};	//for LI_XU_SENSOR_REG_RW 
+unsigned char buf2[256] 	= {0};	//for LI_XU_SENSOR_REGISTER_CONFIGURATION
+unsigned char buf3[256+6] 	= {0};	//for LI_XU_GENERIC_I2C_RW
 
-//TODO: change according to your setup
-const char dev_name[64] = "/dev/video0";
+// TODO: change according to your setup
+char dev_name[64] = "/dev/video0";
 
 struct uvc_xu_control_query xu_query;
 
-#if 0
-//TODO: used in helper function
+//old test registers
+#if AP0202_TRIGGER_TEST_OLD
+// TODO: used in helper function
 typedef struct reg_seq
 {
 	unsigned char reg_data_width;
 	unsigned short reg_addr;
 	unsigned short reg_val;
 }reg_seq;
-//TODO: used in helper function, modify it for different camera
+// TODO: used in helper function, modify it for different camera
 const reg_seq ChangConfig[]=
 {
 	{2,0x098e,0x7c00},
@@ -73,26 +80,40 @@ const reg_seq TrigDisable[]=
 };
 #endif
 
-//used for SPI flash
-//notice it only support 16-bit data
+// used for SPI flash 
+// notice it only support 16-bit data with SPI flash
 typedef struct reg_pair
 {
 	unsigned short reg_addr;
 	unsigned short reg_val;
 }reg_pair;
 
+// TODO: put the register you want to set in here
 const reg_pair ChangConfigFromFlash[]=
 {
-	{0x098e,0x7c00},
-	{0xfc00,0x2800},
-	{0x0040,0x8100}
+	{0x0058,0x0040}		//customer_rev
 };
 
+int open_v4l2_device(char *device_name);
+void error_handle();
+static void write_to_UVC_extension(int fd, int property_id, 
+								int length, unsigned char* buffer);
+static void read_from_UVC_extension(int fd, int property_id, 
+								int length, unsigned char* buffer);
 
+void generic_I2C_write(int fd, int rw_flag, int bufCnt, 
+					   int slaveAddr, int regAddr, unsigned char *i2c_data); 
+void generic_I2C_read(int fd, int rw_flag, int bufCnt, 
+					  int slaveAddr, int regAddr, unsigned char *i2c_data); 
 
-/*********************************************************************************************************
-**                                  Function definition
-*********************************************************************************************************/
+void sensor_reg_write(int fd, int regAddr, int regVal);
+void sensor_reg_read(int fd, int regAddr);
+
+void update_register_setting_from_configuration(int fd, int regCount, 
+										const struct reg_pair *buffer); 
+/*****************************************************************************
+**                           Function definition
+*****************************************************************************/
 
 /* 
  * open the /dev/video* uvc camera device
@@ -149,16 +170,16 @@ void error_handle()
  * 		buffer		- pointer for buffer data
  *  
  */
-static void writeToUVCExtension(int fd, int property_id, 
+static void write_to_UVC_extension(int fd, int property_id, 
 								int length, unsigned char* buffer) 
 {
 	
 	CLEAR(xu_query);
-	xu_query.unit 		= 3;				//has to be unit 3
-	xu_query.query 		= UVC_SET_CUR;		//request code to send to the device
+	xu_query.unit 		= 3;			//has to be unit 3
+	xu_query.query 		= UVC_SET_CUR;	//request code to send to the device
 	xu_query.size 		= length;
 	xu_query.selector 	= property_id; 		
-	xu_query.data 		= buffer;			//control buffer
+	xu_query.data 		= buffer;		//control buffer
 
 	if(ioctl(fd, UVCIOC_CTRL_QUERY, &xu_query) != 0) 
 		error_handle();
@@ -173,15 +194,15 @@ static void writeToUVCExtension(int fd, int property_id,
  * 		buffer		- pointer for buffer data
  *  
  */
-static void readFromUVCExtension(int fd, int property_id, 
+static void read_from_UVC_extension(int fd, int property_id, 
 								int length, unsigned char* buffer) 
 {
 	CLEAR(xu_query);
-	xu_query.unit 		= 3;				//has to be unit 3
-	xu_query.query 		= UVC_GET_CUR;		//request code to send to the device
+	xu_query.unit 		= 3;			//has to be unit 3
+	xu_query.query 		= UVC_GET_CUR;	//request code to send to the device
 	xu_query.size 		= length;
 	xu_query.selector 	= property_id; 		
-	xu_query.data 		= buffer;			//control buffer
+	xu_query.data 		= buffer;		//control buffer
 
 	if(ioctl(fd, UVCIOC_CTRL_QUERY, &xu_query) != 0) 
 		error_handle();
@@ -190,8 +211,8 @@ static void readFromUVCExtension(int fd, int property_id,
 /*
  *  register read/write for different slaves on I2C line
  * 
- *	Byte0: bit7 0:read;1:write. bit[6:0] regAddr width, 1:8-bit register address;
- 														2:16-bit register address
+ *	Byte0: bit7 0:read;1:write. bit[6:0] regAddr width, 1:8-bit register addr;
+ 														2:16-bit register addr
  *		   0x81: write, regAddr is 8-bit; 0x82: write, regAddr is 16-bit
  *		   0x01: read,  regAddr is 8-bit; 0x02: read,  regAddr is 16-bit
  *	Byte1: Length of register data,1~256
@@ -233,8 +254,9 @@ void generic_I2C_write(int fd, int rw_flag, int bufCnt,
 		regVal = (buf3[6]<<8) + buf3[7];
 	}
 
-	writeToUVCExtension(fd, LI_XU_GENERIC_I2C_RW, 256+6, buf3); 
-	printf("I2C slave ADDR[0x%x], Write REG[0x%x]: 0x%x\r\n",slaveAddr, regAddr, regVal);
+	write_to_UVC_extension(fd, LI_XU_GENERIC_I2C_RW, 256+6, buf3); 
+	printf("I2C slave ADDR[0x%x], Write REG[0x%x]: 0x%x\r\n",
+			slaveAddr, regAddr, regVal);
 
 }
 
@@ -263,10 +285,10 @@ void generic_I2C_read(int fd, int rw_flag, int bufCnt,
 	buf3[3] = slaveAddr&0xff;
 	buf3[4] = regAddr>>8;
 	buf3[5] = regAddr&0xff;
-	writeToUVCExtension(fd, LI_XU_GENERIC_I2C_RW, 256+6, buf3);
+	write_to_UVC_extension(fd, LI_XU_GENERIC_I2C_RW, 256+6, buf3);
 	buf3[6] = 0;
 	buf3[7] = 0;
-	readFromUVCExtension(fd, LI_XU_GENERIC_I2C_RW, 256+6, buf3);
+	read_from_UVC_extension(fd, LI_XU_GENERIC_I2C_RW, 256+6, buf3);
 	if(bufCnt==1) {
 		regVal = buf3[6];
 	}
@@ -274,7 +296,8 @@ void generic_I2C_read(int fd, int rw_flag, int bufCnt,
 	{
 		regVal = (buf3[6] << 8) + buf3[7];
 	}
-	printf("I2C slave ADDR[0x%x], Read REG[0x%x]: 0x%x\r\n", slaveAddr, regAddr, regVal);
+	printf("I2C slave ADDR[0x%x], Read REG[0x%x]: 0x%x\r\n", 
+			slaveAddr, regAddr, regVal);
 	
 }
 
@@ -285,7 +308,8 @@ void generic_I2C_read(int fd, int rw_flag, int bufCnt,
  * 		regAddr - register address want to access
  *		regVal  - register value to write
  */
-void sensor_reg_write(int fd, int regAddr, int regVal) {
+void sensor_reg_write(int fd, int regAddr, int regVal) 
+{
 	
 	CLEAR(buf1);
 	
@@ -295,7 +319,7 @@ void sensor_reg_write(int fd, int regAddr, int regVal) {
 	buf1[3] = (regVal >> 8) & 0xff;
 	buf1[4] = regVal & 0xff;
 
-	writeToUVCExtension(fd, LI_XU_SENSOR_REG_RW, 5, buf1);
+	write_to_UVC_extension(fd, LI_XU_SENSOR_REG_RW, 5, buf1);
 
 	printf("Write Sensor REG[0x%x]: 0x%x\r\n",regAddr, regVal);
 }
@@ -306,7 +330,8 @@ void sensor_reg_write(int fd, int regAddr, int regVal) {
  * 		fd 		- file descriptor
  * 		regAddr - register address want to access
  */
-void sensor_reg_read(int fd, int regAddr) {
+void sensor_reg_read(int fd, int regAddr) 
+{
 
 	int regVal = 0;
 
@@ -316,11 +341,11 @@ void sensor_reg_read(int fd, int regAddr) {
 	buf1[1] = (regAddr >> 8) & 0xff;
 	buf1[2] = regAddr & 0xff;
     
-	writeToUVCExtension(fd, LI_XU_SENSOR_REG_RW, 5, buf1);
+	write_to_UVC_extension(fd, LI_XU_SENSOR_REG_RW, 5, buf1);
 	buf1[0] = 0; 						//0 indicates for read
 	buf1[3] = 0;
 	buf1[4] = 0;
-	readFromUVCExtension(fd, LI_XU_SENSOR_REG_RW, 5, buf1);
+	read_from_UVC_extension(fd, LI_XU_SENSOR_REG_RW, 5, buf1);
 
 	regVal = (buf1[3] << 8) + buf1[4];
 	printf("Read Sensor REG[0x%x] = 0x%x\r\n", regAddr, regVal);
@@ -329,12 +354,14 @@ void sensor_reg_read(int fd, int regAddr) {
 
 /*
  *	save register to spi flash on FX3, load it automatically at boot time
+ *  flash for storage is set to be 256 bytes
  *  args:
  * 		fd 		 - file descriptor
  * 		regCount - pairs of regAddr and regVal (up to 62)
  * 		buffer   - sensor register configuration
  */
-void update_register_setting_from_configuration(int fd, int regCount, const struct reg_pair *buffer) 
+void update_register_setting_from_configuration(int fd, int regCount, 
+										const struct reg_pair *buffer) 
 {	
 	int i;
 	CLEAR(buf2);
@@ -374,15 +401,17 @@ void update_register_setting_from_configuration(int fd, int regCount, const stru
 		}
 
 		if  ((i+1)%64 == 0) {
-			writeToUVCExtension(fd, LI_XU_SENSOR_REGISTER_CONFIGURATION, 256, buf2);
+			//store it to SPI flash
+			write_to_UVC_extension(fd, LI_XU_SENSOR_REGISTER_CONFIGURATION, 256, buf2);
 		}
 
-		//readFromUVCExtension(fd, LI_XU_SENSOR_REGISTER_CONFIGURATION, 256, buf2);
+		//read_from_UVC_extension(fd, LI_XU_SENSOR_REGISTER_CONFIGURATION, 256, buf2);
 	}
 	
 }
 
-//for testing
+
+// for testing
 void main(int argc, char *argv[])
 {
 	int v4l2_dev;
@@ -415,15 +444,10 @@ void main(int argc, char *argv[])
 	}
 
 	//test
-	generic_I2C_read(v4l2_dev, 0x02, 2, 0xBA, 0x098e, 0x00);
-	sensor_reg_read(v4l2_dev, 0xfc00);
-	sensor_reg_read(v4l2_dev, 0x0040);
-
 	size = sizeof(ChangConfigFromFlash)/sizeof(reg_pair);
 	update_register_setting_from_configuration(v4l2_dev, size, ChangConfigFromFlash); 
-	generic_I2C_read(v4l2_dev, 0x02, 2, 0xBA, 0x098e, 0x00);
-	sensor_reg_read(v4l2_dev, 0xfc00);
-	sensor_reg_read(v4l2_dev, 0x0040);
+	generic_I2C_read(v4l2_dev, 0x02, 2, 0xBA, 0x058, 0x00);
+	sensor_reg_read(v4l2_dev, 0x0058);
 
 	close(v4l2_dev);	
 
