@@ -19,9 +19,9 @@ sudo apt-get install v4l-utils
 ```
 - compile the code
 ```
-gcc -o test uvc_extension_extra.c
+make
 ```
 - run the code
 ```
-./test
+./uvc_extension_extra
 ```

@@ -104,7 +104,7 @@ static void read_from_UVC_extension(int fd, int property_id,
 void generic_I2C_write(int fd, int rw_flag, int bufCnt, 
 					   int slaveAddr, int regAddr, unsigned char *i2c_data); 
 void generic_I2C_read(int fd, int rw_flag, int bufCnt, 
-					  int slaveAddr, int regAddr, unsigned char *i2c_data); 
+					  int slaveAddr, int regAddr); 
 
 void sensor_reg_write(int fd, int regAddr, int regVal);
 void sensor_reg_read(int fd, int regAddr);
@@ -273,7 +273,7 @@ void generic_I2C_write(int fd, int rw_flag, int bufCnt,
  * 		i2c_data - pointer to register value   
  */
 void generic_I2C_read(int fd, int rw_flag, int bufCnt, 
-					  int slaveAddr, int regAddr, unsigned char *i2c_data) 
+					  int slaveAddr, int regAddr) 
 
 {
 	int regVal = 0;
@@ -412,10 +412,10 @@ void update_register_setting_from_configuration(int fd, int regCount,
 
 
 // for testing
-void main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 	int v4l2_dev;
-	int regval, opt;
+	int opt;
 	int size;
 	int interval = 0;
 
@@ -431,7 +431,7 @@ void main(int argc, char *argv[])
 			case 'h':
 			default:
 			printf("Usage %s [-h] [-i <interval(us)>]\n", argv[0]);
-			return;
+			return 0;
 		}
 	}
 
@@ -440,16 +440,17 @@ void main(int argc, char *argv[])
 	if(v4l2_dev < 0)
 	{
 		printf("open camera %s failed,err code:%d\n\r",dev_name, v4l2_dev);
-		return ;
+		return 0;
 	}
 
 	//test
 	size = sizeof(ChangConfigFromFlash)/sizeof(reg_pair);
 	update_register_setting_from_configuration(v4l2_dev, size, ChangConfigFromFlash); 
-	generic_I2C_read(v4l2_dev, 0x02, 2, 0xBA, 0x058, 0x00);
+	sleep(1);
+	generic_I2C_read(v4l2_dev, 0x02, 2, 0xBA, 0x058);
 	sensor_reg_read(v4l2_dev, 0x0058);
 
 	close(v4l2_dev);	
 
-	return;
+	return 0;
 }
