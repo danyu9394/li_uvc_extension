@@ -32,7 +32,13 @@
 **                      Global data & Function declaration
 *****************************************************************************/
 #define CLEAR(x) 							memset(&(x), 0, sizeof(x))
+#define SIZE(a)								(sizeof(a)/sizeof(*a))
+
 #define MAX_PAIR_FOR_SPI_FLASH				(64)
+#define AP020X_I2C_ADDR						(0xBA)
+#define MAX9295_SER_I2C_ADDR				(0x80)
+#define MAX9296_DESER_I2C_ADDR				(0x90)
+
 
 //define the Leopard Imaging USB3.0 Camera
 // uvc extension id
@@ -376,7 +382,7 @@ void update_register_setting_from_configuration(int fd, int regCount,
 	buf2[4] = regCount & 0xff;
 	buf2[5] = regCount >> 8;
 	buf2[6] = regCount >> 16;
-	buf3[7] = regCount >> 24;
+	buf2[7] = regCount >> 24;
 
 	//max reg, addr pair #= (256 -8)/4 = 62
 	for (i = 2; i < MAX_PAIR_FOR_SPI_FLASH; i++) {
@@ -416,7 +422,6 @@ int main(int argc, char *argv[])
 {
 	int v4l2_dev;
 	int opt;
-	int size;
 	int interval = 0;
 
 	while ((opt = getopt(argc, argv, "hi:")) != -1) {
@@ -444,10 +449,13 @@ int main(int argc, char *argv[])
 	}
 
 	//test
-	size = sizeof(ChangConfigFromFlash)/sizeof(reg_pair);
-	update_register_setting_from_configuration(v4l2_dev, size, ChangConfigFromFlash); 
+	generic_I2C_read(v4l2_dev, 0x02, 1, MAX9295_SER_I2C_ADDR, 0x0000);
+	generic_I2C_read(v4l2_dev, 0x02, 1, MAX9296_DESER_I2C_ADDR, 0x0000);
+
+	update_register_setting_from_configuration(v4l2_dev, 
+			SIZE(ChangConfigFromFlash), ChangConfigFromFlash); 
 	sleep(1);
-	generic_I2C_read(v4l2_dev, 0x02, 2, 0xBA, 0x058);
+	generic_I2C_read(v4l2_dev, 0x02, 2, AP020X_I2C_ADDR, 0x0058);
 	sensor_reg_read(v4l2_dev, 0x0058);
 
 	close(v4l2_dev);	
