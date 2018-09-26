@@ -58,7 +58,7 @@ struct uvc_xu_control_query xu_query;
 
 //#define AP0202_WRITE_REG_ON_THE_FLY
 #define AP0202_WRITE_REG_IN_FLASH
-#define SAVE 1
+
 //test registers on the fly
 #ifdef AP0202_WRITE_REG_ON_THE_FLY
 // TODO: used in helper function
@@ -121,9 +121,9 @@ void generic_I2C_read(int fd, int rw_flag, int bufCnt,
 void sensor_reg_write(int fd, int regAddr, int regVal);
 void sensor_reg_read(int fd, int regAddr);
 
-void save_register_setting_to_flash(int fd, int regCount, 
+void load_register_setting_from_configuration(int fd, int regCount, 
 										const struct reg_pair *buffer); 
-void load_register_setting_from_configuration(int fd); 
+void load_register_setting_from_flash_manually(int fd); 
 
 /*****************************************************************************
 **                           Function definition
@@ -367,14 +367,14 @@ void sensor_reg_read(int fd, int regAddr)
 }
 
 /*
- *	save register to spi flash on FX3
+ *	save register to spi flash on FX3, load it automatically when boot time
  *  flash for storage is set to be 256 bytes
  *  args:
  * 		fd 		 - file descriptor
  * 		regCount - pairs of regAddr and regVal (up to 62)
  * 		buffer   - sensor register configuration
  */
-void save_register_setting_from_configuration(int fd, int regCount, 
+void load_register_setting_from_configuration(int fd, int regCount, 
 										const struct reg_pair *buffer) 
 {	
 	int i;
@@ -424,12 +424,13 @@ void save_register_setting_from_configuration(int fd, int regCount,
 }
 
 /*
- *	load register to spi flash on FX3
+ *	load register to spi flash on FX3 manually 
+ *  #########FOR TEST ONLY###########
  *  flash for storage is set to be 256 bytes
  *  args:
  * 		fd 		 - file descriptor
  */
-void load_register_setting_from_configuration(int fd)  
+void load_register_setting_from_flash_manually(int fd)  
 {
 	int reg_flash_length, addr, val, i;
 	printf("load from flash\r\n");
@@ -455,10 +456,9 @@ void load_register_setting_from_configuration(int fd)
 }
 
 // for testing
-int main(int argc, char *argv[])
+int main()
 {
-	int v4l2_dev;
-	unsigned int i;
+	int v4l2_dev;	
 
 	v4l2_dev = open_v4l2_device(dev_name);
 
@@ -470,6 +470,7 @@ int main(int argc, char *argv[])
 
 	//test
 	#ifdef AP0202_WRITE_REG_ON_THE_FLY
+	unsigned int i;
 	for(i=0 ; i< sizeof(ChangConfig)/sizeof(reg_seq); i++) 
 		generic_I2C_write(v4l2_dev,0x82,ChangConfig[i].reg_data_width, 
 			AP020X_I2C_ADDR,ChangConfig[i].reg_addr,					
@@ -485,14 +486,12 @@ int main(int argc, char *argv[])
 	#endif
 
 	#ifdef AP0202_WRITE_REG_IN_FLASH
-		#if SAVE == 1
-		save_register_setting_from_configuration(v4l2_dev, 
-			SIZE(ChangConfigFromFlash), ChangConfigFromFlash); 
-		#else 
-		load_register_setting_from_configuration(v4l2_dev); 
-		#endif
-	//sleep(1);
-	//generic_I2C_read(v4l2_dev, 0x02, 2, AP020X_I2C_ADDR, 0x0058);
+	
+	//load_register_setting_from_configuration(v4l2_dev, 
+	//	SIZE(ChangConfigFromFlash), ChangConfigFromFlash); 
+	
+	sleep(1);
+	generic_I2C_read(v4l2_dev, 0x02, 2, AP020X_I2C_ADDR, 0x0058);
 	sensor_reg_read(v4l2_dev, 0x0058);
 	#endif
 

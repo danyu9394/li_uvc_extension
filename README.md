@@ -25,3 +25,12 @@ make
 ```
 ./uvc_extension_extra
 ```
+- sequence of using save regsiter setting after power cycle
+    1. put the register you want to save in __ChangConfigFromFlash__ and save
+    2. compile and run the program with __load_register_setting_from_configuration__ _uncommented_
+    3. power cycle the board(unplug usb&12V power supply)
+    4. power on the board 
+    5. run any camera streaming application in linux(e.g. guvcview)**MUST DO**
+    6. _comment out_ __load_register_setting_from_configuration__, compile the code
+    7. re-run the program, and your saved register info is loaded 
+The initialization for GMSL2 and camera is done when you start any streaming application.
