@@ -1,7 +1,7 @@
 # li_uvc_extension
-  This is the sample code for __Leopard USB3.0 AR0231 AP0200 GMSL2__ camera for 
-  register control under Linux using V4L2. For supporting more UVC extension
-  unit features, firmware will need to get updated.
+  This is the sample code for __Leopard USB3.0__ camera for register control, PTS query 
+  under Linux using V4L2. For supporting more UVC extension unit features, 
+  firmware will need to get updated.
 
 ## hardware support
 LI-AR0231-AP020X-GMSL2 USB3.0 camera
