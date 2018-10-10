@@ -8,7 +8,7 @@
   unit features, firmware will need to get updated.
   
   Author: Danyu Li
-  Date: 09/18/18 
+  Date: 10/10/18 
 *****************************************************************************/
 
 #include <stdlib.h>
@@ -29,38 +29,42 @@
 #include <sys/fcntl.h>
 
 /****************************************************************************
-**                      Global data & Function declaration
+**                      	Global data 
 *****************************************************************************/
 #define CLEAR(x) 							memset(&(x), 0, sizeof(x))
 #define SIZE(a)								(sizeof(a)/sizeof(*a))
 
-#define MAX_PAIR_FOR_SPI_FLASH				(64)
-#define AP020X_I2C_ADDR						(0xBA)
-#define MAX9295_SER_I2C_ADDR				(0x80)
-#define MAX9296_DESER_I2C_ADDR				(0x90)
-
-
 //define the Leopard Imaging USB3.0 Camera
 // uvc extension id
+#define LI_XU_PTS_QUERY						(0x08)
 #define LI_XU_SENSOR_REGISTER_CONFIGURATION (0x0c)
 #define LI_XU_SENSOR_REG_RW    			    (0x0e)
 #define LI_XU_GENERIC_I2C_RW 				(0x10)
 
+#define MAX_PAIR_FOR_SPI_FLASH				(64)
 // define the buffer for storage
 unsigned char buf1[5] 		= {0};	//for LI_XU_SENSOR_REG_RW 
 unsigned char buf2[256] 	= {0};	//for LI_XU_SENSOR_REGISTER_CONFIGURATION
 unsigned char buf3[256+6] 	= {0};	//for LI_XU_GENERIC_I2C_RW
+unsigned char buf4[4]		= {0};  //for LI_XU_PTS_QUERY
 
 // TODO: change according to your setup
 char dev_name[64] = "/dev/video0";
 
 struct uvc_xu_control_query xu_query;
 
+enum v4l2_buf_type type;
+
 //#define AP0202_WRITE_REG_ON_THE_FLY
-#define AP0202_WRITE_REG_IN_FLASH
+//#define AP0202_WRITE_REG_IN_FLASH
 
 //test registers on the fly
 #ifdef AP0202_WRITE_REG_ON_THE_FLY
+
+#define AP020X_I2C_ADDR						(0xBA)
+#define MAX9295_SER_I2C_ADDR				(0x80)
+#define MAX9296_DESER_I2C_ADDR				(0x90)
+
 // TODO: used in helper function
 typedef struct reg_seq
 {
@@ -90,22 +94,26 @@ const reg_seq TrigDisable[]=
 };
 #endif
 
-#ifdef AP0202_WRITE_REG_IN_FLASH
-// used for SPI flash 
-// notice it only support 16-bit data with SPI flash
+
 typedef struct reg_pair
 {
 	unsigned short reg_addr;
 	unsigned short reg_val;
 }reg_pair;
 
+#ifdef AP0202_WRITE_REG_IN_FLASH
+// used for SPI flash 
+// notice it only support 16-bit data with SPI flash
 // TODO: put the register you want to set in here
 const reg_pair ChangConfigFromFlash[]=
 {
-	{0x0058,0x3443},//customer_rev		
+	{0x305e,0x0222},//customer_rev		
 };
 #endif
 
+/****************************************************************************
+**							 Function declaration
+*****************************************************************************/
 int open_v4l2_device(char *device_name);
 void error_handle();
 static void write_to_UVC_extension(int fd, int property_id, 
@@ -124,6 +132,9 @@ void sensor_reg_read(int fd, int regAddr);
 void load_register_setting_from_configuration(int fd, int regCount, 
 										const struct reg_pair *buffer); 
 void load_register_setting_from_flash_manually(int fd); 
+
+void get_pts(int fd);
+void set_pts(int fd, unsigned long initVal);
 
 /*****************************************************************************
 **                           Function definition
@@ -221,6 +232,8 @@ static void read_from_UVC_extension(int fd, int property_id,
 	if(ioctl(fd, UVCIOC_CTRL_QUERY, &xu_query) != 0) 
 		error_handle();
 }
+
+/*--------------------------------------------------------------------------- */
 
 /*
  *  register read/write for different slaves on I2C line
@@ -424,7 +437,7 @@ void load_register_setting_from_configuration(int fd, int regCount,
 }
 
 /*
- *	load register to spi flash on FX3 manually 
+ *	load register to spi flash on FX3 manually     
  *  #########FOR TEST ONLY###########
  *  flash for storage is set to be 256 bytes
  *  args:
@@ -454,6 +467,53 @@ void load_register_setting_from_flash_manually(int fd)
 	}
 	
 }
+
+/*
+ * currently PTS information are placed in 2 places
+ * 1. UVC video data header 
+ * 	- a 33-bit PTS timestamp as defined in ITU-REC-H.222.0/ISO/IEC 13818-1
+ * 	- you can get the PTS info by looking at usb sniffing data
+ * 	- uvc header byte 1(BFH) bit 2 for PTS indicator
+ *  - PTS is stored in byte 2-5 of a 12-byte uvc header
+ *  - PTS value stays the same in a frame
+ * 2.  first 4 bytes in a given frame
+ *  - you can get the PTS by grabbing the first 4 bytes of each frame
+ *  - byte order: little endian
+ *  
+ * PTS info:
+ * currently on FX3, PTS counter is sampling at frequency 403M/16 ~ 25MHz
+ * for different camera boards, crystall will slightly drift over time
+ * PTS increments over time can be calculated by 
+ * 		(1/frame_rate)/(1/25MHz) = 25MHz/frame_rate
+ * 
+ * this method is an add-on extension unit for query PTS info
+ * args:
+ * 		fd 		 - file descriptor
+ */
+void get_pts(int fd){
+	CLEAR(buf4);
+	read_from_UVC_extension(fd, LI_XU_PTS_QUERY, 4, buf4);
+	unsigned long pts = buf4[0] | buf4[1] << 8 | buf4[2] << 16| buf4[3] << 24;
+	printf("get PTS = 0x%x\r\n", pts);
+	
+}
+
+/* set PTS counter initial value
+ * args:
+ * 		fd 		- file descriptor
+ * 		initVal	- initial counter start value for PTS(4-byte long)
+ *
+ */
+void set_pts(int fd, unsigned long initVal){
+	CLEAR(buf4);
+	buf4[0] = (initVal>>24)&0xff;
+	buf4[1] = (initVal>>16)&0xff;
+	buf4[2] = (initVal>>8)&0xff;
+	buf4[3] = initVal&0xff;
+	write_to_UVC_extension(fd, LI_XU_PTS_QUERY, 4, buf4);
+	printf("set init count value of PTS to 0x%x\r\n", initVal);
+}
+
 
 // for testing
 int main()
@@ -486,14 +546,18 @@ int main()
 	#endif
 
 	#ifdef AP0202_WRITE_REG_IN_FLASH
-	
-	//load_register_setting_from_configuration(v4l2_dev, 
-	//	SIZE(ChangConfigFromFlash), ChangConfigFromFlash); 
+	load_register_setting_from_configuration(v4l2_dev, 
+		SIZE(ChangConfigFromFlash), ChangConfigFromFlash); 
 	
 	sleep(1);
-	generic_I2C_read(v4l2_dev, 0x02, 2, AP020X_I2C_ADDR, 0x0058);
-	sensor_reg_read(v4l2_dev, 0x0058);
+	//generic_I2C_read(v4l2_dev, 0x02, 2, AP020X_I2C_ADDR, 0x0058);
+	sensor_reg_write(v4l2_dev, 0x5080, 0x00);
+	sensor_reg_read(v4l2_dev, 0x4308);
+	sensor_reg_read(v4l2_dev, 0x5080);
 	#endif
+
+	set_pts(v4l2_dev, 0);
+	get_pts(v4l2_dev);
 
 	close(v4l2_dev);	
 	return 0;
