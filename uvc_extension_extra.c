@@ -36,12 +36,12 @@
 
 //define the Leopard Imaging USB3.0 Camera
 // uvc extension id
-#define LI_XU_PTS_QUERY						(0x08)
-#define LI_XU_SENSOR_REGISTER_CONFIGURATION (0x0c)
+#define LI_XU_PTS_QUERY						(0x08)	// not suppoprted by all usb cameras
+#define LI_XU_SENSOR_REGISTER_CONFIGURATION (0x0c)	// not supported by all usb cameras
 #define LI_XU_SENSOR_REG_RW    			    (0x0e)
 #define LI_XU_GENERIC_I2C_RW 				(0x10)
 
-#define MAX_PAIR_FOR_SPI_FLASH				(64)
+#define MAX_PAIR_FOR_SPI_FLASH				(64)	
 // define the buffer for storage
 unsigned char buf1[5] 		= {0};	//for LI_XU_SENSOR_REG_RW 
 unsigned char buf2[256] 	= {0};	//for LI_XU_SENSOR_REGISTER_CONFIGURATION
@@ -94,6 +94,26 @@ const reg_seq TrigDisable[]=
 };
 #endif
 
+#define AR0231_MIPI_TESTING
+#ifdef AR0231_MIPI_TESTING
+#define AR0231_I2C_ADDR						(0x20)
+typedef struct reg_seq
+{
+	unsigned char reg_data_width;
+	unsigned short reg_addr;
+	unsigned short reg_val;
+}reg_seq;
+
+const reg_seq AR0231_MIPI_REG_TESTING[]=
+{
+	{2,0x3064,0x1802}, // SMIA_TEST
+	{2,0x3056,0x0080}, // GREEN1_GAIN
+	{2,0x3058,0x0080}, // BLUE_GAIN
+	{2,0x305a,0x0080}, // RED_GAIN
+	{2,0x305c,0x0080}, //GREEN2_GAIN
+	{2,0x3138,0x000B}  //OTPM_TCFG_OPT
+};
+#endif
 
 typedef struct reg_pair
 {
@@ -556,9 +576,21 @@ int main()
 	sensor_reg_read(v4l2_dev, 0x5080);
 	#endif
 
+	#ifdef OS05A20_PTS_QUERY
 	set_pts(v4l2_dev, 0);
 	get_pts(v4l2_dev);
+	#endif
 
+	#ifdef AR0231_MIPI_TESTING
+	unsigned int i;
+	for(i=0 ; i< sizeof(AR0231_MIPI_REG_TESTING)/sizeof(reg_seq); i++) {
+		//TODO: choose either one of the function below for register read
+		generic_I2C_read(v4l2_dev,0x02,AR0231_MIPI_REG_TESTING[i].reg_data_width,
+			AR0231_I2C_ADDR,AR0231_MIPI_REG_TESTING[i].reg_addr);
+
+		sensor_reg_read(v4l2_dev, AR0231_MIPI_REG_TESTING[i].reg_addr);
+	}
+	#endif
 	close(v4l2_dev);	
 	return 0;
 }
