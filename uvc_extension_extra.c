@@ -94,7 +94,7 @@ const reg_seq TrigDisable[]=
 };
 #endif
 
-#define AR0231_MIPI_TESTING
+//#define AR0231_MIPI_TESTING
 #ifdef AR0231_MIPI_TESTING
 #define AR0231_I2C_ADDR						(0x20)
 typedef struct reg_seq
@@ -131,15 +131,37 @@ const reg_pair ChangConfigFromFlash[]=
 };
 #endif
 
+#define IMX334_MONO_MIPI_TESTING 
+#ifdef IMX334_MONO_MIPI_TESTING
+#define IMX334_I2C_ADDR						(0x34)
+typedef struct reg_seq
+{
+	unsigned char reg_data_width;
+	unsigned short reg_addr;
+	unsigned short reg_val;
+}reg_seq;
+
+const reg_seq IMX334_MIPI_REG_TESTING[]=
+{
+	{1,0x30E8,0x14}, // PROGRAMMABLE_GAIN_CONTROL
+	{1,0x3302,0x32}, // BLKLEVEL[7:0]
+	{1,0x3303,0x00}, // BLKLEVEL[1:0] range 0x0-0x3ff
+};
+#endif
 /****************************************************************************
 **							 Function declaration
 *****************************************************************************/
-int open_v4l2_device(char *device_name);
-void error_handle();
+static int open_v4l2_device(char *device_name);
+static void error_handle();
+
 static void write_to_UVC_extension(int fd, int property_id, 
 								int length, unsigned char* buffer);
 static void read_from_UVC_extension(int fd, int property_id, 
 								int length, unsigned char* buffer);
+
+static void uvc_get_control(int fd, unsigned int id);
+static void uvc_set_control(int fd, unsigned int id, int value);
+
 
 void generic_I2C_write(int fd, int rw_flag, int bufCnt, 
 					   int slaveAddr, int regAddr, unsigned char *i2c_data); 
@@ -156,6 +178,9 @@ void load_register_setting_from_flash_manually(int fd);
 void get_pts(int fd);
 void set_pts(int fd, unsigned long initVal);
 
+void set_gain(int fd, int analog_gain);
+void get_gain(int fd);
+
 /*****************************************************************************
 **                           Function definition
 *****************************************************************************/
@@ -168,7 +193,7 @@ void set_pts(int fd, unsigned long initVal);
  * returns: 
  * 		file descriptor v4l2_dev
  */
-int open_v4l2_device(char *device_name)
+static int open_v4l2_device(char *device_name)
 {
 	int v4l2_dev;
 
@@ -187,7 +212,7 @@ int open_v4l2_device(char *device_name)
  * returns:
  * 		none
  */
-void error_handle()
+static void error_handle()
 {
 	int res = errno;
 
@@ -251,6 +276,42 @@ static void read_from_UVC_extension(int fd, int property_id,
 
 	if(ioctl(fd, UVCIOC_CTRL_QUERY, &xu_query) != 0) 
 		error_handle();
+}
+
+static void uvc_get_control(int fd, unsigned int id)
+{
+	struct v4l2_control ctrl;
+	int ret;
+
+	ctrl.id = id;
+
+	ret = ioctl(fd, VIDIOC_G_CTRL, &ctrl);
+	if (ret < 0) {
+		printf("unable to get control: %s (%d).\n",
+			strerror(errno), errno);
+		return;
+	}
+
+	printf("Control 0x%08x value %u\n", id, ctrl.value);
+}
+
+static void uvc_set_control(int fd, unsigned int id, int value)
+{
+	struct v4l2_control ctrl;
+	int ret;
+	CLEAR(ctrl);
+	ctrl.id = id;
+	ctrl.value = value;
+
+	ret = ioctl(fd, VIDIOC_S_CTRL, &ctrl);
+	if (ret < 0) {
+		printf("unable to set control: %s (%d).\n",
+			strerror(errno), errno);
+		return;
+	}
+
+	printf("Control 0x%08x set to %u, is %u\n", id, value,
+		ctrl.value);
 }
 
 /*--------------------------------------------------------------------------- */
@@ -535,6 +596,12 @@ void set_pts(int fd, unsigned long initVal){
 }
 
 
+void set_gain(int fd, int analog_gain) {
+	uvc_set_control(fd, V4L2_CID_GAIN, analog_gain);
+}
+void get_gain(int fd) {
+	uvc_get_control(fd, V4L2_CID_GAIN);
+}
 // for testing
 int main()
 {
@@ -590,6 +657,19 @@ int main()
 
 		sensor_reg_read(v4l2_dev, AR0231_MIPI_REG_TESTING[i].reg_addr);
 	}
+	#endif
+
+	#ifdef IMX334_MONO_MIPI_TESTING
+	unsigned int i;
+	for(i=0 ; i< sizeof(IMX334_MIPI_REG_TESTING)/sizeof(reg_seq); i++) {
+		//TODO: choose either one of the function below for register read
+		generic_I2C_read(v4l2_dev,0x02,IMX334_MIPI_REG_TESTING[i].reg_data_width,
+			IMX334_I2C_ADDR,IMX334_MIPI_REG_TESTING[i].reg_addr);
+
+		sensor_reg_read(v4l2_dev, IMX334_MIPI_REG_TESTING[i].reg_addr);
+	}
+	set_gain(v4l2_dev,5);
+	get_gain(v4l2_dev);
 	#endif
 	close(v4l2_dev);	
 	return 0;
