@@ -4,9 +4,11 @@
   firmware will need to get updated.
 
 ## hardware support
-LI-AR0231-AP020X-GMSL2 USB3.0 camera
-LI-OS05A20-MIPI-650IR V1.2 USB3.0 camera
-LI-OV2311-MIPI-850IR V1.0 USB3.0 camera
+- LI-AR0231-AP020X-GMSL2 USB3.0 camera
+- LI-OS05A20-MIPI-650IR V1.2 USB3.0 camera
+- LI-OV2311-MIPI-850IR V1.0 USB3.0 camera
+- LI-IMX334-MIPI  V1.0 USB3.0 camera
+- LI-IMX226-MIPI V1.0 USB3.0 camera
 
 ## test environment
 - kernel: 4.15.0-34-generic 
@@ -23,6 +25,10 @@ sudo apt-get install v4l-utils
 ```
 make
 ```
+- clean up the code
+```
+make clean
+```
 - run the code
 ```
 ./uvc_extension_extra
@@ -32,8 +38,7 @@ make
     2. compile and run the program with __load_register_setting_from_configuration__ _uncommented_
     3. power cycle the board(unplug usb&12V power supply)
     4. power on the board 
-    5. run any camera streaming application in linux(e.g. guvcview)**MUST DO**
-    6. _comment out_ __load_register_setting_from_configuration__, compile the code
-    7. re-run the program, and your saved register info is loaded 
+    5. _comment out_ __load_register_setting_from_configuration__, compile the code
+    6. re-run the program, and your saved register info is loaded 
 
 
